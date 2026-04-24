@@ -8,159 +8,145 @@ import database as db
 from datetime import date, timedelta
 
 # ── CONFIG ─────────────────────────────────────────────────────────────
-st.set_page_config(page_title="DataDrive OOH — Strategy Center", page_icon="📈", layout="wide")
+st.set_page_config(page_title="DataDrive OOH Manager", page_icon="📊", layout="wide")
 
-# Forzamos inicialización para asegurar columnas nuevas
-if 'db_init' not in st.session_state:
+# Asegurar DB inicializada
+if 'db_ready' not in st.session_state:
     db.init_db()
-    st.session_state['db_init'] = True
+    st.session_state['db_ready'] = True
 
-# ── CSS PREMIUM ────────────────────────────────────────────────────────
+# ── DISEÑO PROFESIONAL (Colores Cohesivos) ─────────────────────────────
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    .stMetric { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 15px; }
-    .roadmap-card { background: rgba(59,130,246,0.05); border-left: 4px solid #3b82f6; padding: 20px; border-radius: 8px; margin-bottom: 15px; }
-    .stAlert { background-color: rgba(59,130,246,0.1) !important; color: white !important; }
+    
+    /* Fondo y contenedores */
+    .stApp { background-color: #0e1117; }
+    
+    /* Métricas con estilo Dashboard Pro */
+    [data-testid="stMetric"] {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 10px;
+        padding: 20px;
+    }
+    
+    /* Sidebar limpia */
+    [data-testid="stSidebar"] {
+        background-color: #161b22;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    /* Badges de estado */
+    .badge { padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+    .badge-ok { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+    .badge-warn { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+    .badge-err { background: rgba(239, 68, 68, 0.15); color: #f87171; }
 </style>
 """, unsafe_allow_html=True)
 
 # ── SIDEBAR ────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/2103/2103633.png", width=80)
-    st.title("DataDrive OOH")
-    st.caption("Intelligence Strategy v2.1")
+    st.markdown("<h2 style='color:#3b82f6;'>DataDrive</h2>", unsafe_allow_html=True)
+    st.caption("Gestión Inteligente de Paneles OOH")
     st.divider()
-    page = st.selectbox("Módulo Principal", ["🚀 Estrategia & Pitch", "🗺️ Mapa de Inteligencia", "📊 Dashboard Operativo", "➕ Gestión de Datos"])
+    page = st.radio("Navegación", 
+                    ["🗺️ Mapa de Paneles", "📊 Dashboard KPIs", "📋 Contratos", "🏢 Clientes", "➕ Agregar Datos"],
+                    label_visibility="collapsed")
     st.divider()
     
-    # Filtros que se muestran solo en el mapa
-    if page == "🗺️ Mapa de Inteligencia":
-        st.subheader("Filtros de Audiencia")
-        target_nse = st.multiselect("NSE Objetivo", ["A", "B", "C"], default=["A", "B"])
-        target_demo = st.multiselect("Perfil Demográfico", ["Ejecutivos", "Jóvenes/Turistas", "Familias", "Estudiantes", "Trabajadores", "Público General"], default=["Ejecutivos"])
-        st.divider()
-        show_heatmap = st.checkbox("Capa de Calor (Tráfico)", value=True)
+    if page == "🗺️ Mapa de Paneles":
+        st.subheader("Inteligencia de Audiencia")
+        nse_filter = st.multiselect("NSE Objetivo", ["A", "B", "C"], default=["A", "B"])
+        demo_filter = st.multiselect("Público Target", 
+                                     ["Ejecutivos", "Jóvenes/Turistas", "Familias", "Estudiantes", "Trabajadores", "Público General"],
+                                     default=["Ejecutivos", "Jóvenes/Turistas"])
+        show_heat = st.checkbox("Mapa de Calor (Tráfico)", value=True)
+    
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
+    st.caption("v2.5 Professional Edition")
 
 # ── DATA FETCH ────────────────────────────────────────────────────────
 df = db.get_paneles_con_estado()
 
-# ── PAGE 1: ESTRATEGIA & PITCH ─────────────────────────────────────────
-if page == "🚀 Estrategia & Pitch":
-    st.title("🚀 De vender 'Espacios' a vender 'Inteligencia'")
-    st.subheader("Propuesta de Valor Data-Driven para la Gerencia")
+# ── PAGE 1: MAPA ──────────────────────────────────────────────────────
+if page == "🗺️ Mapa de Paneles":
+    st.title("Mapa de Inventario e Inteligencia")
     
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        st.markdown(f"""
-        ### 1. El Nuevo Paradigma: OOH Científico
-        Como **Ingeniero Estadístico**, transformamos el medio intuitivo en uno basado en resultados predecibles.
-        
-        <div class="roadmap-card">
-            <b>🛡️ Eliminación de Desperdicio (30%):</b> Nuestros modelos de atribución cruzan datos de movilidad real para impactar solo a quien importa. No vendemos "vistas", vendemos "relevancia".
-        </div>
-        <div class="roadmap-card">
-            <b>🧠 Inteligencia de Audiencia (NSE A/B):</b> Mapeamos rutas de comportamiento específicas. Sabemos dónde está tu cliente a las 8 AM.
-        </div>
-        <div class="roadmap-card">
-            <b>⚡ Optimización Real-Time (DOOH):</b> Motor de reglas dinámico que cambia anuncios según el clima, tráfico o eventos en vivo.
-        </div>
-        """, unsafe_allow_html=True)
-        
-    with col2:
-        st.info("💡 **Argumento de Venta:** Seremos los únicos en el mercado peruano con reportes de impacto basados en ciencia, no en estimaciones visuales.")
-        st.success("📈 **Nueva Fuente de Ingreso:** *Data-as-a-Service*. Cobrar por el análisis de audiencias además del panel.")
-
-    st.divider()
-    st.subheader("🧮 Simulador de Eficiencia de Campaña")
-    c1, c2, c3 = st.columns(3)
-    presupuesto = c1.number_input("Presupuesto Mensual (S/)", value=10000, step=1000)
-    alcance_tradicional = c2.number_input("Impresiones Estimadas (Tradicional)", value=500000)
-    precision = c3.slider("Optimización DataDrive (%)", 10, 50, 30)
-    
-    impacto_real = alcance_tradicional * (1 + precision/100)
-    ahorro = presupuesto * (precision/100)
-    
-    res1, res2, res3 = st.columns(3)
-    res1.metric("Alcance Optimizado", f"{int(impacto_real):,} imp.")
-    res2.metric("Eficiencia Ganada", f"+{precision}%")
-    res3.metric("Ahorro Estimado (S/)", f"S/ {int(ahorro):,}", delta="Eficiencia de Costos")
-
-# ── PAGE 2: MAPA DE INTELIGENCIA ───────────────────────────────────────
-elif page == "🗺️ Mapa de Inteligencia":
-    st.title("🗺️ Mapa de Inteligencia de Audiencias")
-    
-    # Filtrado inteligente
+    # Filtros aplicados
     subset = df.copy()
-    if 'nse' in subset.columns and target_nse:
-        subset = subset[subset['nse'].str.contains('|'.join(target_nse))]
-    if 'demografia' in subset.columns and target_demo:
-        subset = subset[subset['demografia'].str.contains('|'.join(target_demo))]
+    if nse_filter: subset = subset[subset['nse'].str.contains('|'.join(nse_filter))]
+    if demo_filter: subset = subset[subset['demografia'].str.contains('|'.join(demo_filter))]
 
-    # Map construction
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total Paneles", len(df))
+    c2.metric("Filtrados", len(subset))
+    c3.metric("Ocupación", f"{int(len(df[df['estado']!='libre'])/len(df)*100)}%")
+    c4.metric("Score Medio", f"{int(subset['puntuacion'].mean())} pts")
+
     m = folium.Map(location=[-12.08, -77.05], zoom_start=12, tiles="CartoDB dark_matter")
     
-    if show_heatmap and 'puntuacion' in df.columns:
-        heat_data = [[row['latitud'], row['longitud'], row['puntuacion']] for index, row in df.iterrows()]
-        HeatMap(heat_data, radius=25, blur=15, gradient={0.4: 'blue', 0.65: 'lime', 1: 'red'}).add_to(m)
+    if show_heat:
+        HeatMap([[r['latitud'], r['longitud'], r['puntuacion']] for _, r in df.iterrows()], 
+                radius=25, blur=15, gradient={0.4: '#3b82f6', 0.65: '#10b981', 1: '#ef4444'}).add_to(m)
 
     for _, row in subset.iterrows():
-        color = "green" if row["estado"]=="ocupado" else "orange" if row["estado"]=="por_vencer" else "red"
-        html = f"""
-        <div style='font-family:sans-serif; width:200px'>
-            <b>{row['nombre']}</b><br/>
-            <span style='font-size:0.8rem'>{row['direccion']}</span><hr/>
-            <b>NSE:</b> {row.get('nse', '—')} | <b>Puntaje:</b> {row.get('puntuacion', 0)}/100<br/>
-            <b>Target:</b> {row.get('demografia', '—')}<br/>
-            <b>Tarifa:</b> S/ {row['precio_mensual']}<br/>
-            <b>Estado:</b> <span style='color:{color}'>{row['estado']}</span>
-        </div>
-        """
+        color = "#22c55e" if row["estado"]=="ocupado" else "#f59e0b" if row["estado"]=="por_vencer" else "#ef4444"
         folium.CircleMarker(
             location=[row["latitud"], row["longitud"]],
-            radius=10, color="white", weight=1, fill=True, fill_color=color, fill_opacity=0.8,
-            popup=folium.Popup(html, max_width=250)
+            radius=10, color="white", weight=0.5, fill=True, fill_color=color, fill_opacity=0.8,
+            popup=f"<b>{row['nombre']}</b><br>NSE: {row['nse']}<br>Target: {row['demografia']}<br>Tarifa: S/ {row['precio_mensual']}"
         ).add_to(m)
 
-    st_folium(m, width="100%", height=600)
-    st.caption("🔥 La capa de calor muestra densidad de audiencia e intensidad de tráfico vehicular.")
+    st_folium(m, width="100%", height=550)
 
-# ── PAGE 3: DASHBOARD OPERATIVO ────────────────────────────────────────
-elif page == "📊 Dashboard Operativo":
-    st.title("📊 Indicadores de Gestión (Manager View)")
+# ── PAGE 2: KPIs ──────────────────────────────────────────────────────
+elif page == "📊 Dashboard KPIs":
+    st.title("Análisis de Rendimiento")
     
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Ocupación Real", f"{int(len(df[df['estado']!='libre'])/len(df)*100)}%")
-    m2.metric("Revenue Mensual", f"S/ {df[df['estado']!='libre']['precio_mensual'].sum():,}")
-    m3.metric("Ingresos en Riesgo", f"S/ {df[df['estado']=='por_vencer']['precio_mensual'].sum():,}", delta_color="inverse")
-    
-    avg_score = df['puntuacion'].mean() if 'puntuacion' in df.columns else 0
-    m4.metric("Puntuación Media", f"{int(avg_score)} pts")
+    m1.metric("Revenue Mensual", f"S/ {df[df['estado']!='libre']['precio_mensual'].sum():,}")
+    m2.metric("Ingresos en Riesgo", f"S/ {df[df['estado']=='por_vencer']['precio_mensual'].sum():,}", delta_color="inverse")
+    m3.metric("Paneles Libres", len(df[df['estado']=='libre']))
+    m4.metric("Valor del Inventario", f"S/ {df['precio_mensual'].sum():,}")
 
     st.divider()
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("Inventario por NSE")
-        if 'nse' in df.columns:
-            fig = px.bar(df.groupby("nse").size().reset_index(name="Cant"), x="nse", y="Cant", color="nse", template="plotly_dark")
-            st.plotly_chart(fig, use_container_width=True)
-    with c2:
-        st.subheader("Potencial de Impacto por Distrito")
-        if 'puntuacion' in df.columns:
-            fig2 = px.scatter(df, x="distrito", y="puntuacion", size="precio_mensual", color="tipo", hover_name="nombre", template="plotly_dark")
-            st.plotly_chart(fig2, use_container_width=True)
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.subheader("Distribución por NSE")
+        fig = px.pie(df, names="nse", color="nse", hole=0.5, 
+                     color_discrete_sequence=px.colors.sequential.Blues_r, template="plotly_dark")
+        fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
+        
+    with col_b:
+        st.subheader("Eficiencia por Distrito")
+        fig2 = px.bar(df.groupby("distrito")["puntuacion"].mean().reset_index(), 
+                      x="puntuacion", y="distrito", orientation='h', template="plotly_dark",
+                      color_discrete_sequence=["#3b82f6"])
+        fig2.update_layout(margin=dict(t=0, b=0, l=0, r=0))
+        st.plotly_chart(fig2, use_container_width=True)
 
-# ── PAGE 4: GESTIÓN ────────────────────────────────────────────────────
+# ── PAGE 3: CONTRATOS ─────────────────────────────────────────────────
+elif page == "📋 Contratos":
+    st.title("Gestión de Contratos")
+    df_contratos = db.get_paneles_con_estado()[["nombre", "distrito", "cliente", "fecha_fin", "estado", "precio_mensual"]]
+    st.dataframe(df_contratos, use_container_width=True, hide_index=True)
+
+# ── PAGE 4: CLIENTES ──────────────────────────────────────────────────
+elif page == "🏢 Clientes":
+    st.title("Directorio de Clientes")
+    # Simulación de lista de clientes para la vista profesional
+    st.info("Visualizando clientes activos y potencial de renovación.")
+    st.dataframe(df[df['cliente'].notna()][["cliente", "nombre_campana", "precio_mensual"]], use_container_width=True)
+
+# ── PAGE 5: AGREGAR ───────────────────────────────────────────────────
 else:
-    st.title("➕ Gestión de Inventario y Clientes")
-    st.info("Aquí puedes registrar nuevos paneles y contratos para alimentar el motor de inteligencia.")
-    with st.expander("📝 Resetear Base de Datos (Limpiar caché)"):
-        if st.button("Re-inicializar Datos"):
+    st.title("Gestión de Datos")
+    st.markdown("Use este panel para actualizar el inventario o los contratos.")
+    with st.expander("⚙️ Herramientas de Sistema"):
+        if st.button("Resetear Base de Datos"):
             db.init_db()
-            st.success("Base de datos reiniciada con éxito.")
             st.rerun()
-    with st.expander("📝 Registrar Nuevo Contrato"):
-        st.date_input("Fecha Inicio")
-        st.date_input("Fecha Fin")
-        st.button("Guardar Contrato")
+    st.success("Sistema listo para nuevas entradas.")
