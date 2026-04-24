@@ -9,7 +9,11 @@ from datetime import date, timedelta
 
 # ── CONFIG ─────────────────────────────────────────────────────────────
 st.set_page_config(page_title="DataDrive OOH — Strategy Center", page_icon="📈", layout="wide")
-db.init_db()
+
+# Forzamos inicialización para asegurar columnas nuevas
+if 'db_init' not in st.session_state:
+    db.init_db()
+    st.session_state['db_init'] = True
 
 # ── CSS PREMIUM ────────────────────────────────────────────────────────
 st.markdown("""
@@ -18,7 +22,7 @@ st.markdown("""
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     .stMetric { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 15px; }
     .roadmap-card { background: rgba(59,130,246,0.05); border-left: 4px solid #3b82f6; padding: 20px; border-radius: 8px; margin-bottom: 15px; }
-    .audience-badge { background: #3b82f6; color: white; padding: 2px 10px; border-radius: 10px; font-size: 0.7rem; font-weight: bold; }
+    .stAlert { background-color: rgba(59,130,246,0.1) !important; color: white !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -26,16 +30,21 @@ st.markdown("""
 with st.sidebar:
     st.image("https://cdn-icons-png.flaticon.com/512/2103/2103633.png", width=80)
     st.title("DataDrive OOH")
-    st.caption("Intelligence Strategy v2.0")
+    st.caption("Intelligence Strategy v2.1")
     st.divider()
     page = st.selectbox("Módulo Principal", ["🚀 Estrategia & Pitch", "🗺️ Mapa de Inteligencia", "📊 Dashboard Operativo", "➕ Gestión de Datos"])
     st.divider()
+    
+    # Filtros que se muestran solo en el mapa
     if page == "🗺️ Mapa de Inteligencia":
         st.subheader("Filtros de Audiencia")
         target_nse = st.multiselect("NSE Objetivo", ["A", "B", "C"], default=["A", "B"])
-        target_demo = st.multiselect("Perfil Demográfico", ["Ejecutivos", "Jóvenes/Turistas", "Familias", "Estudiantes", "Trabajadores"], default=["Ejecutivos"])
+        target_demo = st.multiselect("Perfil Demográfico", ["Ejecutivos", "Jóvenes/Turistas", "Familias", "Estudiantes", "Trabajadores", "Público General"], default=["Ejecutivos"])
         st.divider()
         show_heatmap = st.checkbox("Capa de Calor (Tráfico)", value=True)
+
+# ── DATA FETCH ────────────────────────────────────────────────────────
+df = db.get_paneles_con_estado()
 
 # ── PAGE 1: ESTRATEGIA & PITCH ─────────────────────────────────────────
 if page == "🚀 Estrategia & Pitch":
@@ -81,17 +90,18 @@ if page == "🚀 Estrategia & Pitch":
 # ── PAGE 2: MAPA DE INTELIGENCIA ───────────────────────────────────────
 elif page == "🗺️ Mapa de Inteligencia":
     st.title("🗺️ Mapa de Inteligencia de Audiencias")
-    df = db.get_paneles_con_estado()
     
     # Filtrado inteligente
     subset = df.copy()
-    if target_nse: subset = subset[subset['nse'].str.contains('|'.join(target_nse))]
-    if target_demo: subset = subset[subset['demografia'].str.contains('|'.join(target_demo))]
+    if 'nse' in subset.columns and target_nse:
+        subset = subset[subset['nse'].str.contains('|'.join(target_nse))]
+    if 'demografia' in subset.columns and target_demo:
+        subset = subset[subset['demografia'].str.contains('|'.join(target_demo))]
 
     # Map construction
     m = folium.Map(location=[-12.08, -77.05], zoom_start=12, tiles="CartoDB dark_matter")
     
-    if show_heatmap:
+    if show_heatmap and 'puntuacion' in df.columns:
         heat_data = [[row['latitud'], row['longitud'], row['puntuacion']] for index, row in df.iterrows()]
         HeatMap(heat_data, radius=25, blur=15, gradient={0.4: 'blue', 0.65: 'lime', 1: 'red'}).add_to(m)
 
@@ -101,8 +111,8 @@ elif page == "🗺️ Mapa de Inteligencia":
         <div style='font-family:sans-serif; width:200px'>
             <b>{row['nombre']}</b><br/>
             <span style='font-size:0.8rem'>{row['direccion']}</span><hr/>
-            <b>NSE:</b> {row['nse']} | <b>Puntaje:</b> {row['puntuacion']}/100<br/>
-            <b>Target:</b> {row['demografia']}<br/>
+            <b>NSE:</b> {row.get('nse', '—')} | <b>Puntaje:</b> {row.get('puntuacion', 0)}/100<br/>
+            <b>Target:</b> {row.get('demografia', '—')}<br/>
             <b>Tarifa:</b> S/ {row['precio_mensual']}<br/>
             <b>Estado:</b> <span style='color:{color}'>{row['estado']}</span>
         </div>
@@ -119,30 +129,37 @@ elif page == "🗺️ Mapa de Inteligencia":
 # ── PAGE 3: DASHBOARD OPERATIVO ────────────────────────────────────────
 elif page == "📊 Dashboard Operativo":
     st.title("📊 Indicadores de Gestión (Manager View)")
-    df = db.get_paneles_con_estado()
     
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Ocupación Real", f"{int(len(df[df['estado']!='libre'])/len(df)*100)}%")
     m2.metric("Revenue Mensual", f"S/ {df[df['estado']!='libre']['precio_mensual'].sum():,}")
     m3.metric("Ingresos en Riesgo", f"S/ {df[df['estado']=='por_vencer']['precio_mensual'].sum():,}", delta_color="inverse")
-    m4.metric("Puntuación Media", f"{int(df['puntuacion'].mean())} pts")
+    
+    avg_score = df['puntuacion'].mean() if 'puntuacion' in df.columns else 0
+    m4.metric("Puntuación Media", f"{int(avg_score)} pts")
 
     st.divider()
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("Inventario por NSE")
-        fig = px.bar(df.groupby("nse").size().reset_index(name="Cant"), x="nse", y="Cant", color="nse", template="plotly_dark")
-        st.plotly_chart(fig, use_container_width=True)
+        if 'nse' in df.columns:
+            fig = px.bar(df.groupby("nse").size().reset_index(name="Cant"), x="nse", y="Cant", color="nse", template="plotly_dark")
+            st.plotly_chart(fig, use_container_width=True)
     with c2:
         st.subheader("Potencial de Impacto por Distrito")
-        fig2 = px.scatter(df, x="distrito", y="puntuacion", size="precio_mensual", color="tipo", hover_name="nombre", template="plotly_dark")
-        st.plotly_chart(fig2, use_container_width=True)
+        if 'puntuacion' in df.columns:
+            fig2 = px.scatter(df, x="distrito", y="puntuacion", size="precio_mensual", color="tipo", hover_name="nombre", template="plotly_dark")
+            st.plotly_chart(fig2, use_container_width=True)
 
 # ── PAGE 4: GESTIÓN ────────────────────────────────────────────────────
 else:
     st.title("➕ Gestión de Inventario y Clientes")
     st.info("Aquí puedes registrar nuevos paneles y contratos para alimentar el motor de inteligencia.")
-    # (Formularios simplificados para ahorrar espacio)
+    with st.expander("📝 Resetear Base de Datos (Limpiar caché)"):
+        if st.button("Re-inicializar Datos"):
+            db.init_db()
+            st.success("Base de datos reiniciada con éxito.")
+            st.rerun()
     with st.expander("📝 Registrar Nuevo Contrato"):
         st.date_input("Fecha Inicio")
         st.date_input("Fecha Fin")
