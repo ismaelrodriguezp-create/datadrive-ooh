@@ -5,7 +5,6 @@ from datetime import date
 
 DB_PATH = "ooh_datadrive.db"
 
-# Columnas: ID(1), Nombre(2), Lat(3), Lng(4), Distrito(5), Dir(6), Tipo(7), Cara(8), Ancho(9), Alto(10), Traf(11), Precio(12), NSE(13), Demo(14), Punt(15)
 SAMPLE_PANELS = [
     (1,  "MIR-01 Av. Larco",        -12.1211, -77.0283, "Miraflores", "Av. Larco cdra. 12", "Valla", "Norte", 12.0, 4.0, "Alto", 8500, "A", "Ejecutivos", 95),
     (2,  "MIR-02 Óvalo Miraflores", -12.1180, -77.0310, "Miraflores", "Óvalo Miraflores", "Digital", "Este", 6.0, 3.0, "Muy Alto", 12000, "A/B", "Jóvenes/Turistas", 98),
@@ -28,50 +27,61 @@ def get_conn():
     return sqlite3.connect(DB_PATH, check_same_thread=False)
 
 def init_db():
+    # Eliminamos el archivo físico para forzar recreación
+    if os.path.exists(DB_PATH):
+        try:
+            os.remove(DB_PATH)
+        except:
+            pass # Si está bloqueado, intentaremos con DROP
+            
     conn = get_conn()
     c = conn.cursor()
-    # Eliminamos para asegurar nueva estructura
-    c.execute("DROP TABLE IF EXISTS paneles")
-    c.execute("""
+    c.executescript("""
+        DROP TABLE IF EXISTS paneles;
         CREATE TABLE paneles (
             id INTEGER PRIMARY KEY,
             nombre TEXT, latitud REAL, longitud REAL, distrito TEXT,
             direccion TEXT, tipo TEXT, cara TEXT, ancho_m REAL, alto_m REAL,
             nivel_trafico TEXT, precio_mensual REAL, nse TEXT, demografia TEXT, puntuacion INTEGER,
             activo INTEGER DEFAULT 1
-        )
+        );
+        CREATE TABLE IF NOT EXISTS clientes (id INTEGER PRIMARY KEY, empresa TEXT, ruc TEXT, contacto TEXT, email TEXT, telefono TEXT, sector TEXT);
+        CREATE TABLE IF NOT EXISTS contratos (id INTEGER PRIMARY KEY AUTOINCREMENT, panel_id INTEGER, cliente_id INTEGER, fecha_inicio TEXT, fecha_fin TEXT, tarifa_mensual REAL, nombre_campana TEXT, notas TEXT);
     """)
     c.executemany("INSERT INTO paneles VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)", SAMPLE_PANELS)
-    
-    # Asegurar tablas de soporte
-    c.execute("CREATE TABLE IF NOT EXISTS clientes (id INTEGER PRIMARY KEY, empresa TEXT, ruc TEXT, contacto TEXT, email TEXT, telefono TEXT, sector TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS contratos (id INTEGER PRIMARY KEY AUTOINCREMENT, panel_id INTEGER, cliente_id INTEGER, fecha_inicio TEXT, fecha_fin TEXT, tarifa_mensual REAL, nombre_campana TEXT, notas TEXT)")
-    
     conn.commit()
     conn.close()
 
 def get_paneles_con_estado():
     conn = get_conn()
-    # Query explícito para evitar errores de p.*
-    query = """
-        SELECT p.id, p.nombre, p.latitud, p.longitud, p.distrito, p.direccion, 
-               p.tipo, p.cara, p.ancho_m, p.alto_m, p.nivel_trafico, 
-               p.precio_mensual, p.nse, p.demografia, p.puntuacion,
-               c.fecha_fin, cl.empresa AS cliente, c.nombre_campana
-        FROM paneles p
-        LEFT JOIN contratos c ON c.panel_id = p.id AND c.fecha_fin >= date('now')
+    query = "SELECT * FROM paneles WHERE activo = 1"
+    try:
+        df = pd.read_sql_query(query, conn)
+    except:
+        # Si falla (ej. tabla no existe), reiniciamos y volvemos a intentar
+        conn.close()
+        init_db()
+        conn = get_conn()
+        df = pd.read_sql_query(query, conn)
+        
+    # Agregamos contratos
+    query_c = """
+        SELECT c.panel_id, c.fecha_fin, cl.empresa AS cliente, c.nombre_campana
+        FROM contratos c
         LEFT JOIN clientes cl ON cl.id = c.cliente_id
-        WHERE p.activo = 1
+        WHERE c.fecha_fin >= date('now')
     """
-    df = pd.read_sql_query(query, conn)
+    df_c = pd.read_sql_query(query_c, conn)
     conn.close()
+    
+    df = df.merge(df_c, left_on="id", right_on="panel_id", how="left")
     
     today = date.today()
     def calc_status(row):
-        if not row["fecha_fin"] or str(row["fecha_fin"]) == 'None': return "libre"
+        if pd.isna(row["fecha_fin"]): return "libre"
         end = date.fromisoformat(str(row["fecha_fin"]))
         return "por_vencer" if (end - today).days <= 30 else "ocupado"
     
     df["estado"] = df.apply(calc_status, axis=1)
-    df["dias_restantes"] = df["fecha_fin"].apply(lambda f: (date.fromisoformat(str(f)) - today).days if f and str(f)!='None' else None)
+    df["dias_restantes"] = df["fecha_fin"].apply(lambda f: (date.fromisoformat(str(f)) - today).days if pd.notna(f) else None)
     return df
